@@ -30,7 +30,7 @@ def get_fin_data_3_day(file_tickers, target) -> pd.DataFrame:
         shift = 5
     elif datetime.today().weekday() < 5:
         shift = 3
-    elif datetime.today().weekday() == 6:
+    else:
         shift = 4
     date_start = datetime.now().date() - timedelta(days=shift)
     date_end = datetime.now().date() + timedelta(days=1)
