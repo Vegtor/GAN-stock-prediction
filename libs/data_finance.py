@@ -2,22 +2,28 @@ import pandas as pd
 import csv
 import yfinance as yf
 from datetime import datetime, timedelta
-from uprava_dat import fill_missing
-import numpy as np
+from libs.data_edit import fill_missing
+#import numpy as np
 from requests import Session
 from requests_cache import CacheMixin, SQLiteCache
 from requests_ratelimiter import LimiterMixin, MemoryQueueBucket
 from pyrate_limiter import Duration, RequestRate, Limiter
 
 
-def get_fin_data_3_day(file_tickers) -> pd.DataFrame:
+def check_empty_target(df, target) -> pd.DataFrame:
+    last_row = df.iloc[-1]
+    columns_with_target = [col for col in df.columns if target in col]
+
+    if any(pd.isna(last_row[col]) for col in columns_with_target):
+        df = df.head(-1)
+    return df
+
+def get_fin_data_3_day(file_tickers, target) -> pd.DataFrame:
     # Načítání názvů ------------------###
-    #file = open("data/apple_tickers.csv", "r")
     file = open(file_tickers, "r")
     reader = csv.reader(file)
     name_tickers = next(reader)
     file.close()
-    #used_indicators = next(reader)
     #----------------------------------###
 
     # Časový interval ----------------------------------------###
@@ -32,6 +38,7 @@ def get_fin_data_3_day(file_tickers) -> pd.DataFrame:
     #---------------------------------------------------------###
 
     whole_data = get_fin_data_mult(name_tickers, date_start, date_end)
+    whole_data = check_empty_target(whole_data, target)
 
     if whole_data.shape[0] > 3:
         nan_count = whole_data.iloc[-1,:].isna().sum()
@@ -39,8 +46,8 @@ def get_fin_data_3_day(file_tickers) -> pd.DataFrame:
             whole_data = whole_data.head(-1)
         else:
             whole_data = whole_data.tail(-1)
+    whole_data = fill_missing(whole_data)
     return whole_data
-#whole_data = fill_missing(whole_data)
 #whole_data.to_csv("data/test.csv")
 
 def get_fin_data_mult(name_tickers, date_start, date_end) -> pd.DataFrame:
