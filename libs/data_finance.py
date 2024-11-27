@@ -25,18 +25,16 @@ def get_fin_data_3_day(file_tickers, target) -> pd.DataFrame:
     name_tickers = next(reader)
     file.close()
     #----------------------------------###
-
     # Časový interval ----------------------------------------###
-    if datetime.today().weekday() < 5:
-        shift = 2
-    elif datetime.today().weekday() == 5:
+    if datetime.today().weekday() < 3:
+        shift = 5
+    elif datetime.today().weekday() < 5:
         shift = 3
-    else:
+    elif datetime.today().weekday() == 6:
         shift = 4
     date_start = datetime.now().date() - timedelta(days=shift)
     date_end = datetime.now().date() + timedelta(days=1)
     #---------------------------------------------------------###
-
     whole_data = get_fin_data_mult(name_tickers, date_start, date_end)
     whole_data = check_empty_target(whole_data, target)
 
