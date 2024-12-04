@@ -1,14 +1,10 @@
 import csv
-from datetime import timedelta
 
 import pandas as pd
 import numpy as np
-from libs.data_finance import get_fin_data_mult, check_empty_target, get_fin_data_indiv
-from libs.data_indicators_fft import tech_indicators, fin_fourier
-from libs.data_trends import get_trends, filter_trends
 
 
-def get_only(data, file_tickers) -> pd.DataFrame:
+def leave_only(data, file_tickers) -> pd.DataFrame:
     # Načítání názvů ------------------###
     file = open(file_tickers, "r")
     reader = csv.reader(file)

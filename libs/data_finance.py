@@ -3,7 +3,6 @@ import csv
 import yfinance as yf
 from datetime import datetime, timedelta
 from libs.data_edit import fill_missing
-#import numpy as np
 from requests import Session
 from requests_cache import CacheMixin, SQLiteCache
 from requests_ratelimiter import LimiterMixin, MemoryQueueBucket
@@ -11,12 +10,9 @@ from pyrate_limiter import Duration, RequestRate, Limiter
 
 
 def check_empty_target(df, target) -> pd.DataFrame:
-    last_row = df.iloc[-1]
-    columns_with_target = [col for col in df.columns if target in col]
-
-    if any(pd.isna(last_row[col]) for col in columns_with_target):
-        df = df.head(-1)
-    return df
+    target_columns = [col for col in df.columns if target in col]
+    df_cleaned = df.dropna(subset=target_columns)
+    return df_cleaned
 
 def get_fin_data_3_day(file_tickers, target) -> pd.DataFrame:
     # Načítání názvů ------------------###
