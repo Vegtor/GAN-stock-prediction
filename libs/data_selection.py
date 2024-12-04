@@ -9,20 +9,23 @@ from scipy import stats
 
 def rfe_feature_selection(data, target, n_features_to_select=10, ranking_threshold=None, train_size=0.7,
                           return_details=False):
-    """
-    Perform Recursive Feature Elimination (RFE) for feature selection
+    """Perform Recursive Feature Elimination (RFE) for feature selection.
 
-    Parameters:
-    - data: DataFrame containing features
-    - target: Target variable series
-    - n_features_to_select: Number of features to select
-    - ranking_threshold: Threshold for feature ranking (optional)
-    - test_size: Proportion of data for testing
-    - random_state: Random seed for reproducibility
-    - return_details: Whether to return additional details about selection
+    Args:
+        data (pandas.DataFrame): DataFrame containing features.
+        target (list): List of target variables.
+        n_features_to_select (int, optional): Number of features to select.
+            Defaults to 10.
+        ranking_threshold (float, optional): Threshold for feature ranking.
+            Defaults to None.
+        train_size (float, optional): Proportion of data for training.
+            Defaults to 0.7.
+        return_details (bool, optional): Whether to return additional details
+            about selection. Defaults to False.
 
     Returns:
-    - Selected features or tuple with selected features and details
+        List or tuple containing selected features or tuple with selected features
+        and detailed selection information.
     """
     X = data.copy()
     y = target.copy()
@@ -68,15 +71,19 @@ def advanced_anova_feature_selection(data, target, alpha=0.05, normalize=True, r
     """
     Advanced ANOVA feature selection with additional preprocessing options
 
-    Parameters:
-    - data: DataFrame containing features and target
-    - target: Name of the target column
-    - alpha: Significance level for feature selection
-    - normalize: Whether to normalize continuous features
-    - return_details: Whether to return additional details about selection
+    Args:
+        data (pandas.DataFrame): DataFrame containing features.
+        target (list): List of target variables.
+        alpha (float, optional): Significance level for feature selection.
+            Defaults to 0.05.
+        normalize (bool, optional): Whether to normalize the data to have zero mean.
+            Defaults to True.
+        return_details (bool, optional): Whether to return additional details about selection.
+            Defaults to False.
 
     Returns:
-    - Selected features or tuple with selected features and details
+        List or tuple containing selected features or tuple with selected features
+        and detailed selection information.
     """
 
     X = data.copy()
