@@ -63,75 +63,22 @@ class Discriminator(nn.Module):
         return out
 
 def sliding_window(x, y, window):
-    x_ = []
-    y_ = []
+    x_new = []
+    new = []
     y_gan = []
     for i in range(window, x.shape[0]):
         tmp_x = x[i - window: i, :]
         tmp_y = y[i]
         tmp_y_gan = y[i - window: i + 1]
-        x_.append(tmp_x)
-        y_.append(tmp_y)
+        x_new.append(tmp_x)
+        new.append(tmp_y)
         y_gan.append(tmp_y_gan)
-    x_ = torch.from_numpy(np.array(x_)).float()
-    y_ = torch.from_numpy(np.array(y_)).float()
+    x_new = torch.from_numpy(np.array(x_new)).float()
+    new = torch.from_numpy(np.array(new)).float()
     y_gan = torch.from_numpy(np.array(y_gan)).float()
-    return x_, y_, y_gan
+    return x_new, new, y_gan
 
-def epoch_cycle(device, train_x, train_x_slide, test_x_slide, train_y_gan):
-    batch_size = 128
-    learning_rate = 0.00016
-    num_epochs = 165
-
-    trainDataloader = DataLoader(TensorDataset(train_x_slide, train_y_gan), batch_size=batch_size, shuffle=False)
-
-    model_G = Generator(train_x.shape[1]).to(device)
-    model_D = Discriminator().to(device)
-
-    criterion = nn.BCELoss()
-    optimizer_G = torch.optim.Adam(model_G.parameters(), lr=learning_rate, betas=(0, 0.9))
-    optimizer_D = torch.optim.Adam(model_D.parameters(), lr=learning_rate, betas=(0, 0.9))
-
-    scheduler_1 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_G, T_max=165, eta_min=0, last_epoch=-1)
-    scheduler_2 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_D, T_max=165, eta_min=0, last_epoch=-1)
-    for epoch in range(num_epochs):
-        loss_G = []
-        loss_D = []
-        for (x, y) in trainDataloader:
-            x = x.to(device)
-            y = y.to(device)
-
-            generated_data = model_G(x)
-            generated_data = torch.cat([y[:, :4, :], generated_data.reshape(-1, 1, 1)], axis=1)
-
-            discriminant_out_real = model_D(y)
-            real_labels = torch.ones_like(discriminant_out_real).to(device)
-            lossD_real = criterion(discriminant_out_real, real_labels)
-
-            discriminant_out_gen = model_D(generated_data)
-            gen_labels = torch.zeros_like(real_labels).to(device)
-            lossD_gen = criterion(discriminant_out_gen, gen_labels)
-
-            lossD = (lossD_real + lossD_gen)
-
-            model_D.zero_grad()
-            lossD.backward(retain_graph=True)
-            optimizer_D.step()
-            loss_D.append(lossD.item())
-
-            output_gen = model_D(generated_data)
-            lossG = criterion(output_gen, real_labels)
-
-            model_G.zero_grad()
-            lossG.backward()
-            optimizer_G.step()
-            loss_G.append(lossG.item())
-
-            scheduler_1.step()
-            scheduler_2.step()
-    return model_G
-
-def training(data, out_prices, param_d, param_g):
+def models_preparation_gan(data, out_prices):
     x = data.values
     y = out_prices.values
     split_1 = int(x.shape[0] * 0.7)
@@ -150,28 +97,108 @@ def training(data, out_prices, param_d, param_g):
     train_x_slide, train_y_slide, train_y_gan = sliding_window(train_x, train_y, 4)
     test_x_slide, test_y_slide, test_y_gan = sliding_window(test_x, test_y, 4)
 
+    return {'x_scaler': x_scaler, 'train_x': train_x, 'test_x': test_x, 'train_x_slide': train_x_slide, 'test_x_slide': test_x_slide,
+            'y_scaler': y_scaler, 'train_y': train_y, 'test_y': test_y, 'train_y_slide': train_y_slide, 'test_y_slide': test_y_slide,
+            'train_y_gan': train_y_gan, 'test_y_gan': test_y_gan}
+
+def setup_training_gan(prepared_data, batch_size=128, learning_rate=0.00016, betas_G=(0, 0.9), betas_D=(0, 0.9)):
     use_cuda = 1
     device = torch.device("cuda" if (torch.cuda.is_available() & use_cuda) else "cpu")
-    model_G = epoch_cycle(device, train_x, train_x_slide, test_x_slide, train_y_gan)
+    trainDataloader = DataLoader(TensorDataset(prepared_data['train_x_slide'], prepared_data['train_y_gan']), batch_size=batch_size, shuffle=False)
+
+    model_G = Generator(prepared_data['train_x'].shape[1]).to(device)
+    model_D = Discriminator().to(device)
+
+    criterion = nn.BCELoss()
+    optimizer_G = torch.optim.Adam(model_G.parameters(), lr=learning_rate, betas=betas_G)
+    optimizer_D = torch.optim.Adam(model_D.parameters(), lr=learning_rate, betas=betas_D)
+
+    scheduler_1 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_G, T_max=165, eta_min=0, last_epoch=-1)
+    scheduler_2 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_D, T_max=165, eta_min=0, last_epoch=-1)
+
+    return {
+        'device': device, 'criterion': criterion, 'data_loader': trainDataloader,
+        'model_G': model_G, 'optimizer_G': optimizer_G, 'scheduler_G': scheduler_1,
+        'model_D': model_D, 'optimizer_D': optimizer_D, 'scheduler_D': scheduler_2,
+    }
+
+def run_model_gan(prepared_models, num_epochs=165):
+    device = prepared_models['device']
+    criterion = prepared_models['criterion']
+    train_loader = prepared_models['train_loader']
+
+    model_G = prepared_models['model_G']
+    optimizer_G = prepared_models['optimizer_G']
+    scheduler_G = prepared_models['scheduler_G']
+
+    model_D = prepared_models['model_D']
+    optimizer_D = prepared_models['optimizer_D']
+    scheduler_D = prepared_models['scheduler_D']
+
+    for epoch in range(num_epochs):
+        for x, y in train_loader:
+            x, y = x.to(device), y.to(device)
+
+            # Generator forward pass
+            generated_data = model_G(x)
+            generated_data = torch.cat([y[:, :4, :], generated_data.reshape(-1, 1, 1)], axis=1)
+
+            # Discriminator training
+            real_labels = torch.ones_like(model_D(y)).to(device)
+            gen_labels = torch.zeros_like(real_labels).to(device)
+
+            loss_D_real = criterion(model_D(y), real_labels)
+            lossD_gen = criterion(model_D(generated_data), gen_labels)
+            loss_D = loss_D_real + lossD_gen
+
+            optimizer_D.zero_grad()
+            loss_D.backward(retain_graph=True)
+            optimizer_D.step()
+
+            # Generator training
+            output_gen = model_D(generated_data)
+            loss_G = criterion(output_gen, real_labels)
+
+            optimizer_G.zero_grad()
+            loss_G.backward()
+            optimizer_G.step()
+
+            # Update learning rates
+            scheduler_G.step()
+            scheduler_D.step()
+    return model_G
+
+def evaluate_model_gan(model_G, prepared_data):
+    device = prepared_data['device']
+    y_scaler = prepared_data['y_scaler']
 
     model_G.eval()
-    pred_y_train = model_G(train_x_slide.to(device))
-    pred_y_test = model_G(test_x_slide.to(device))
+    pred_y_train = model_G(prepared_data['train_x_slide'].to(device))
+    pred_y_test = model_G(prepared_data['test_x_slide'].to(device))
 
-    y_train_true = y_scaler.inverse_transform(train_y_slide)
+    y_train_true = y_scaler.inverse_transform(prepared_data['train_y_slide'])
     y_train_pred = y_scaler.inverse_transform(pred_y_train.cpu().detach().numpy())
 
-    y_test_true = y_scaler.inverse_transform(test_y_slide)
+    y_test_true = y_scaler.inverse_transform(prepared_data['test_y_slide'])
     y_test_pred = y_scaler.inverse_transform(pred_y_test.cpu().detach().numpy())
 
     MSE = mean_squared_error(y_test_true, y_test_pred)
     RMSE = math.sqrt(MSE)
-    generator_shape = train_x.shape[1]
+    generator_shape = prepared_data['train_x'].shape[1]
 
-    return model_G, generator_shape, MSE, RMSE
+    return {
+        'mse': MSE, 'rmse': RMSE, 'generator_shape': generator_shape,
+        'train_true': y_train_true, 'train_pred': y_train_pred,
+        'test_true': y_test_true, 'test_pred': y_test_pred
+    }
+def train_cycle_gan(data, out_prices, batch_size=128, learning_rate=0.00016, betas_G=(0, 0.9), betas_D=(0, 0.9), num_epochs=165):
+    prepared_data = models_preparation_gan(data, out_prices)
+    prepared_models = setup_training_gan(prepared_data, batch_size, learning_rate, betas_G, betas_D)
+    model_G = run_model_gan(prepared_models, num_epochs)
+    results = evaluate_model_gan(model_G, prepared_data)
+    return results
 
-def use_model(model_file, model_shape):
-    use_cuda = 1
+def use_model(model_file, model_shape, use_cuda=1):
     device = torch.device("cuda" if (torch.cuda.is_available() & use_cuda) else "cpu")
     model_load = Generator(model_shape).to(device)
     state = torch.load(model_file,map_location=torch.device('cpu'))
