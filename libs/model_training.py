@@ -18,7 +18,7 @@ class Generator(nn.Module):
         self.linear_3 = nn.Linear(64, 1)
         self.dropout = nn.Dropout(0.2)
 
-    def forward(self, x):
+    def forward(self, x, device):
         h0 = torch.zeros(1, x.size(0), 1024).to(device)
         out_1, _ = self.gru_1(x, h0)
         out_1 = self.dropout(out_1)
@@ -37,7 +37,7 @@ class Generator(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self):
         super().__init__()
-        self.conv_1 = nn.Conv1d(4, 32, kernel_size=5, stride=1, padding='same')
+        self.conv_1 = nn.Conv1d(5, 32, kernel_size=5, stride=1, padding='same')
         self.conv_2 = nn.Conv1d(32, 64, kernel_size=5, stride=1, padding='same')
         self.conv_3 = nn.Conv1d(64, 128, kernel_size=3, stride=1, padding='same')
         self.linear_1 = nn.Linear(128, 220)
@@ -195,7 +195,7 @@ def run_model_gan(prepared_models, num_epochs=165):
     """
     device = prepared_models['device']
     criterion = prepared_models['criterion']
-    train_loader = prepared_models['train_loader']
+    train_loader = prepared_models['data_loader']
 
     model_G = prepared_models['model_G']
     optimizer_G = prepared_models['optimizer_G']
@@ -210,7 +210,7 @@ def run_model_gan(prepared_models, num_epochs=165):
             x, y = x.to(device), y.to(device)
 
             # Generator forward pass
-            generated_data = model_G(x)
+            generated_data = model_G(x, device)
             generated_data = torch.cat([y[:, :4, :], generated_data.reshape(-1, 1, 1)], axis=1)
 
             # Discriminator training
@@ -239,24 +239,25 @@ def run_model_gan(prepared_models, num_epochs=165):
     return model_G
 
 
-def evaluate_model_gan(model_G, prepared_data):
+def evaluate_model_gan(model_G, prepared_data, device):
     """
     Evaluation of model from GAN training phase.
 
     Args:
-        model_G: Model of generator from GAN training process.
+        model_G(Generator): Model of generator from GAN training process.
         prepared_data (dictionary): Dictionary containing prepared data. It is an output of models_preparation_gan.
+        device (torch.device): Device used for whole process of training.
 
     Returns:
         A dictionary containing MSE of generator, RMSE of generator, generator shape,
         training and testing values with predictions based on model.
     """
-    device = prepared_data['device']
+    #device = prepared_data['device']
     y_scaler = prepared_data['y_scaler']
 
     model_G.eval()
-    pred_y_train = model_G(prepared_data['train_x_slide'].to(device))
-    pred_y_test = model_G(prepared_data['test_x_slide'].to(device))
+    pred_y_train = model_G(prepared_data['train_x_slide'].to(device), device)
+    pred_y_test = model_G(prepared_data['test_x_slide'].to(device), device)
 
     y_train_true = y_scaler.inverse_transform(prepared_data['train_y_slide'])
     y_train_pred = y_scaler.inverse_transform(pred_y_train.cpu().detach().numpy())
@@ -299,13 +300,13 @@ def train_cycle_gan(data, target, num_epochs=165, batch_size=128, learning_rate=
             Defaults to 165.
 
     Returns:
-        Same return as funtion evaluate_model_gan. A dictionary containing MSE of generator, RMSE of generator,
+        Same return as function evaluate_model_gan. A dictionary containing MSE of generator, RMSE of generator,
         generator shape, training and testing values with predictions based on model.
     """
     prepared_data = models_preparation_gan(data, target)
     prepared_models = setup_training_gan(prepared_data, batch_size, learning_rate, betas_G, betas_D, tmax_G, tmax_D)
     model_G = run_model_gan(prepared_models, num_epochs)
-    results = evaluate_model_gan(model_G, prepared_data)
+    results = evaluate_model_gan(model_G, prepared_data, prepared_models["device"])
     return results
 
 
@@ -320,10 +321,10 @@ def use_model(model_file, model_shape, use_cuda=1):
             Defaults to 1.
 
     Returns:
-        Loaded Torch model of generator ready to use.
+        A dictionary with loaded Torch model of generator and set device.
     """
     device = torch.device("cuda" if (torch.cuda.is_available() & use_cuda) else "cpu")
     model_load = Generator(model_shape).to(device)
     state = torch.load(model_file, map_location=torch.device('cpu'))
     model_load.load_state_dict(state)
-    return model_load
+    return {'model': model_load, 'device': device}
