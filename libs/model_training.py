@@ -10,9 +10,9 @@ import math
 class Generator(nn.Module):
     def __init__(self, input_size):
         super().__init__()
-        self.gru_1 = nn.GRU(input_size, 1024, batch_first = True)
-        self.gru_2 = nn.GRU(1024, 512, batch_first = True)
-        self.gru_3 = nn.GRU(512, 256, batch_first = True)
+        self.gru_1 = nn.GRU(input_size, 1024, batch_first=True)
+        self.gru_2 = nn.GRU(1024, 512, batch_first=True)
+        self.gru_3 = nn.GRU(512, 256, batch_first=True)
         self.linear_1 = nn.Linear(256, 128)
         self.linear_2 = nn.Linear(128, 64)
         self.linear_3 = nn.Linear(64, 1)
@@ -33,12 +33,13 @@ class Generator(nn.Module):
         out = self.linear_3(out_5)
         return out
 
+
 class Discriminator(nn.Module):
     def __init__(self):
         super().__init__()
-        self.conv_1 = nn.Conv1d(4, 32, kernel_size = 5, stride = 1, padding = 'same')
-        self.conv_2 = nn.Conv1d(32, 64, kernel_size = 5, stride = 1, padding = 'same')
-        self.conv_3 = nn.Conv1d(64, 128, kernel_size = 3, stride = 1, padding = 'same')
+        self.conv_1 = nn.Conv1d(4, 32, kernel_size=5, stride=1, padding='same')
+        self.conv_2 = nn.Conv1d(32, 64, kernel_size=5, stride=1, padding='same')
+        self.conv_3 = nn.Conv1d(64, 128, kernel_size=3, stride=1, padding='same')
         self.linear_1 = nn.Linear(128, 220)
         self.linear_2 = nn.Linear(220, 220)
         self.linear_3 = nn.Linear(220, 1)
@@ -62,25 +63,55 @@ class Discriminator(nn.Module):
         out = self.sigmoid(out_3)
         return out
 
-def sliding_window(x, y, window):
+
+def sliding_window(x, y, window=4):
+    """
+    Function for reshaping data into small sections of data - windows.
+
+    Args:
+        x (pandas.DataFrame): DataFrame containing features.
+        y (list): List of target variables.
+        window (int, optional): Size of the sliding window.
+            Defaults to 4.
+
+    Returns:
+        A tuple containing a 3D array (array with 3 dimensions containing features in structures of windows),
+        an array (array of target values for specific windows)
+        and an array (Array of target values to be used in structure of windows)
+    """
     x_new = []
-    new = []
+    y_new = []
     y_gan = []
     for i in range(window, x.shape[0]):
         tmp_x = x[i - window: i, :]
         tmp_y = y[i]
         tmp_y_gan = y[i - window: i + 1]
         x_new.append(tmp_x)
-        new.append(tmp_y)
+        y_new.append(tmp_y)
         y_gan.append(tmp_y_gan)
     x_new = torch.from_numpy(np.array(x_new)).float()
-    new = torch.from_numpy(np.array(new)).float()
+    y_new = torch.from_numpy(np.array(y_new)).float()
     y_gan = torch.from_numpy(np.array(y_gan)).float()
-    return x_new, new, y_gan
+    return x_new, y_new, y_gan
 
-def models_preparation_gan(data, out_prices):
+
+def models_preparation_gan(data, target):
+    """
+    Preparation of data and MinMax scaling. Separation to test and train, creation of learning windows.
+
+    Args:
+        data (pandas.DataFrame): DataFrame containing features.
+        target (list): List of target variables.
+
+    Returns:
+        A dictionary containing MinMax scalers and data seperated to test and train parts,
+        together with versions structured to windows.
+        Precise list of return variables is: x_scaler, train_x, test_x, train_x_slide,
+        test_x_slide, y_scaler, train_y, test_y, train_y_slide, test_y_slide, train_y_gan, test_y_gan.
+        Variables with slide in name correspond to versions with windows.
+    """
     x = data.values
-    y = out_prices.values
+    y = target.values
     split_1 = int(x.shape[0] * 0.7)
     train_y = y[3:split_1 + 3, :]
     train_x = x[:split_1, :]
@@ -97,14 +128,41 @@ def models_preparation_gan(data, out_prices):
     train_x_slide, train_y_slide, train_y_gan = sliding_window(train_x, train_y, 4)
     test_x_slide, test_y_slide, test_y_gan = sliding_window(test_x, test_y, 4)
 
-    return {'x_scaler': x_scaler, 'train_x': train_x, 'test_x': test_x, 'train_x_slide': train_x_slide, 'test_x_slide': test_x_slide,
-            'y_scaler': y_scaler, 'train_y': train_y, 'test_y': test_y, 'train_y_slide': train_y_slide, 'test_y_slide': test_y_slide,
+    return {'x_scaler': x_scaler, 'train_x': train_x, 'test_x': test_x, 'train_x_slide': train_x_slide,
+            'test_x_slide': test_x_slide,
+            'y_scaler': y_scaler, 'train_y': train_y, 'test_y': test_y, 'train_y_slide': train_y_slide,
+            'test_y_slide': test_y_slide,
             'train_y_gan': train_y_gan, 'test_y_gan': test_y_gan}
 
-def setup_training_gan(prepared_data, batch_size=128, learning_rate=0.00016, betas_G=(0, 0.9), betas_D=(0, 0.9)):
+
+def setup_training_gan(prepared_data, batch_size=128, learning_rate=0.00016,
+                       betas_G=(0, 0.9), betas_D=(0, 0.9), tmax_G=165, tmax_D=165):
+    """
+    Setup models, optimizers and schedulers for training of GAN based on set parameters.
+
+    Args:
+        prepared_data (dictionary): Dictionary containing prepared data. It is an output of models_preparation_gan.
+        batch_size (int, optional): Size of mini-batch.
+            Defaults to 128.
+        learning_rate (float, optional): Learning rate.
+            Defaults to 0.00016.
+        betas_G (tuple, optional): Beta parameters of optimizer for generator.
+            Defaults to (0, 0.9).
+        betas_D (tuple, optional): Beta parameters of optimizer for discriminator.
+            Defaults to (0, 0.9).
+        tmax_G (int, optional): Max number of training iterations for cosine annealing scheduler for generator.
+            Defaults to 165.
+        tmax_D (int, optional): Max number of training iterations for cosine annealing scheduler for discriminator.
+            Defaults to 165.
+
+    Returns:
+        A dictionary containing pytorch device, function for learning criteria, instance of DataLoader on training data
+        and there is model, optimizer and scheduler for generator and discriminator (respectively).
+    """
     use_cuda = 1
     device = torch.device("cuda" if (torch.cuda.is_available() & use_cuda) else "cpu")
-    trainDataloader = DataLoader(TensorDataset(prepared_data['train_x_slide'], prepared_data['train_y_gan']), batch_size=batch_size, shuffle=False)
+    trainDataloader = DataLoader(TensorDataset(prepared_data['train_x_slide'],
+                                               prepared_data['train_y_gan']), batch_size=batch_size, shuffle=False)
 
     model_G = Generator(prepared_data['train_x'].shape[1]).to(device)
     model_D = Discriminator().to(device)
@@ -113,16 +171,28 @@ def setup_training_gan(prepared_data, batch_size=128, learning_rate=0.00016, bet
     optimizer_G = torch.optim.Adam(model_G.parameters(), lr=learning_rate, betas=betas_G)
     optimizer_D = torch.optim.Adam(model_D.parameters(), lr=learning_rate, betas=betas_D)
 
-    scheduler_1 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_G, T_max=165, eta_min=0, last_epoch=-1)
-    scheduler_2 = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_D, T_max=165, eta_min=0, last_epoch=-1)
+    scheduler_G = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_G, T_max=tmax_G, eta_min=0, last_epoch=-1)
+    scheduler_D = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer_D, T_max=tmax_D, eta_min=0, last_epoch=-1)
 
     return {
         'device': device, 'criterion': criterion, 'data_loader': trainDataloader,
-        'model_G': model_G, 'optimizer_G': optimizer_G, 'scheduler_G': scheduler_1,
-        'model_D': model_D, 'optimizer_D': optimizer_D, 'scheduler_D': scheduler_2,
+        'model_G': model_G, 'optimizer_G': optimizer_G, 'scheduler_G': scheduler_G,
+        'model_D': model_D, 'optimizer_D': optimizer_D, 'scheduler_D': scheduler_D,
     }
 
+
 def run_model_gan(prepared_models, num_epochs=165):
+    """
+    Training cycle for GAN model with set number of epochs.
+
+    Args:
+        prepared_models (dictionary): Dictionary containing prepared models. It is an output of setup_training_gan.
+        num_epochs (int, optional): Number of training epochs.
+            Defaults to 165.
+
+    Returns:
+        Model for generating data.
+    """
     device = prepared_models['device']
     criterion = prepared_models['criterion']
     train_loader = prepared_models['train_loader']
@@ -168,7 +238,19 @@ def run_model_gan(prepared_models, num_epochs=165):
             scheduler_D.step()
     return model_G
 
+
 def evaluate_model_gan(model_G, prepared_data):
+    """
+    Evaluation of model from GAN training phase.
+
+    Args:
+        model_G: Model of generator from GAN training process.
+        prepared_data (dictionary): Dictionary containing prepared data. It is an output of models_preparation_gan.
+
+    Returns:
+        A dictionary containing MSE of generator, RMSE of generator, generator shape,
+        training and testing values with predictions based on model.
+    """
     device = prepared_data['device']
     y_scaler = prepared_data['y_scaler']
 
@@ -191,19 +273,57 @@ def evaluate_model_gan(model_G, prepared_data):
         'train_true': y_train_true, 'train_pred': y_train_pred,
         'test_true': y_test_true, 'test_pred': y_test_pred
     }
-def train_cycle_gan(data, out_prices, batch_size=128, learning_rate=0.00016, betas_G=(0, 0.9), betas_D=(0, 0.9), num_epochs=165):
-    prepared_data = models_preparation_gan(data, out_prices)
-    prepared_models = setup_training_gan(prepared_data, batch_size, learning_rate, betas_G, betas_D)
+
+
+def train_cycle_gan(data, target, num_epochs=165, batch_size=128, learning_rate=0.00016, betas_G=(0, 0.9),
+                    betas_D=(0, 0.9), tmax_G=165, tmax_D=165):
+    """
+    Whole process of training cycle for GAN model with set parameters.
+
+    Args:
+        data (pandas.DataFrame): DataFrame containing features.
+        target (list): List of target variables.
+        batch_size (int, optional): Size of mini-batch.
+            Defaults to 128.
+        num_epochs (int, optional): Number of training epochs.
+            Defaults to 165.
+        learning_rate (float, optional): Learning rate.
+            Defaults to 0.00016.
+        betas_G (tuple, optional): Beta parameters of optimizer for generator.
+            Defaults to (0, 0.9).
+        betas_D (tuple, optional): Beta parameters of optimizer for discriminator.
+            Defaults to (0, 0.9).
+        tmax_G (int, optional): Max number of training iterations for cosine annealing scheduler for generator.
+            Defaults to 165.
+        tmax_D (int, optional): Max number of training iterations for cosine annealing scheduler for discriminator.
+            Defaults to 165.
+
+    Returns:
+        Same return as funtion evaluate_model_gan. A dictionary containing MSE of generator, RMSE of generator,
+        generator shape, training and testing values with predictions based on model.
+    """
+    prepared_data = models_preparation_gan(data, target)
+    prepared_models = setup_training_gan(prepared_data, batch_size, learning_rate, betas_G, betas_D, tmax_G, tmax_D)
     model_G = run_model_gan(prepared_models, num_epochs)
     results = evaluate_model_gan(model_G, prepared_data)
     return results
 
+
 def use_model(model_file, model_shape, use_cuda=1):
+    """
+    Loading of Torch model from state dict file.
+
+    Args:
+        model_file (string): Path to file containing Torch state dict of generator.
+        model_shape (int): Number of features used for training.
+        use_cuda (int, optional): True or false statement in int format about using cuda.
+            Defaults to 1.
+
+    Returns:
+        Loaded Torch model of generator ready to use.
+    """
     device = torch.device("cuda" if (torch.cuda.is_available() & use_cuda) else "cpu")
     model_load = Generator(model_shape).to(device)
-    state = torch.load(model_file,map_location=torch.device('cpu'))
+    state = torch.load(model_file, map_location=torch.device('cpu'))
     model_load.load_state_dict(state)
     return model_load
-
-
-
