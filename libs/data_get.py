@@ -8,8 +8,10 @@ from libs.data_indicators_fft import tech_indicators, fin_fourier
 from libs.data_trends import get_trends_3_days, filter_trends, get_trends
 
 
-def obtain_whole_data(date_start, date_end, file_tickers, target) -> pd.DataFrame:
+def obtain_whole_data(date_start, date_end, file_tickers, target, trends=1, keywords=None) -> pd.DataFrame:
     # Načítání názvů ------------------###
+    if keywords is None:
+        keywords = []
     file = open(file_tickers, "r")
     reader = csv.reader(file)
     name_tickers = next(reader)
@@ -23,26 +25,26 @@ def obtain_whole_data(date_start, date_end, file_tickers, target) -> pd.DataFram
     target_prices = get_fin_data_indiv(target, date_start - timedelta(days=42), date_end)
     target_prices = target_prices.iloc[:, :-2]
 
-    fft = fin_fourier(target_prices.iloc[:, 3])
-    fft.index = target_prices.index
-    fft = fft[date_start:date_end]
-
     mavg = tech_indicators(target_prices)
     mavg = mavg[date_start:date_end]
     mavg.index = whole_data.index
-
-    keywords = ['iPhone', 'Apple', 'iMac']
-    trends = get_trends(keywords, date_start, date_end)
-    trends = filter_trends(list(target_prices.index.values), trends)
-    trends.index = whole_data.index
-
     whole_data = whole_data.merge(mavg, left_index=True, right_index=True, how='outer')
-    whole_data = whole_data.merge(trends, left_index=True, right_index=True, how='outer')
+
+    if trends == 1:
+        #keywords = ['iPhone', 'Apple', 'iMac']
+        trends = get_trends(keywords, date_start, date_end)
+        trends = filter_trends(list(target_prices.index.values), trends)
+        trends.index = whole_data.index
+        whole_data = whole_data.merge(trends, left_index=True, right_index=True, how='outer')
+
+    fft = fin_fourier(target_prices.iloc[:, 3])
+    fft.index = target_prices.index
+    fft = fft[date_start:date_end]
     whole_data = whole_data.merge(fft, left_index=True, right_index=True, how='outer')
 
     return whole_data
 
-def obtain_dataset_3_days(file_tickers, target) -> pd.DataFrame:
+def obtain_dataset_3_days(file_tickers, target, trends=1, keywords=None) -> pd.DataFrame:
     # Načítání názvů ------------------###
     file = open(file_tickers, "r")
     reader = csv.reader(file)
@@ -60,7 +62,7 @@ def obtain_dataset_3_days(file_tickers, target) -> pd.DataFrame:
     date_end = datetime.now().date() + timedelta(days=1)
     # ---------------------------------------------------------###
 
-    whole_data = obtain_whole_data(date_start, date_end, file_tickers, target)
+    whole_data = obtain_whole_data(date_start, date_end, file_tickers, target, trends, keywords)
 
     if whole_data.shape[0] > 3:
         nan_count = whole_data.iloc[-1,:].isna().sum()
