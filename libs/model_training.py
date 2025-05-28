@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
+from sympy import residue
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error
@@ -18,7 +19,8 @@ class Generator(nn.Module):
         self.linear_3 = nn.Linear(64, 1)
         self.dropout = nn.Dropout(0.2)
 
-    def forward(self, x, device):
+    def forward(self, x):
+        device = x.device
         h0 = torch.zeros(1, x.size(0), 1024).to(device)
         out_1, _ = self.gru_1(x, h0)
         out_1 = self.dropout(out_1)
@@ -95,7 +97,7 @@ def sliding_window(x, y, window=4):
     return x_new, y_new, y_gan
 
 
-def models_preparation_gan(data, target):
+def data_preparation_gan(data, target):
     """
     Preparation of data and MinMax scaling. Separation to test and train, creation of learning windows.
 
@@ -113,9 +115,9 @@ def models_preparation_gan(data, target):
     x = data.values
     y = target.values
     split_1 = int(x.shape[0] * 0.7)
-    train_y = y[3:split_1 + 3, :]
+    train_y = y[3:split_1 + 3]
     train_x = x[:split_1, :]
-    test_y = y[split_1:, :]
+    test_y = y[split_1:]
     test_x = x[split_1:, :]
 
     x_scaler = MinMaxScaler(feature_range=(-1, 1))
@@ -125,7 +127,11 @@ def models_preparation_gan(data, target):
     train_y = y_scaler.fit_transform(train_y.reshape(-1, 1))
     test_y = y_scaler.transform(test_y.reshape(-1, 1))
 
+    if test_x.shape[0] != test_y.shape[0]:
+        test = 0;
+
     train_x_slide, train_y_slide, train_y_gan = sliding_window(train_x, train_y, 4)
+
     test_x_slide, test_y_slide, test_y_gan = sliding_window(test_x, test_y, 4)
 
     return {'x_scaler': x_scaler, 'train_x': train_x, 'test_x': test_x, 'train_x_slide': train_x_slide,
@@ -136,7 +142,7 @@ def models_preparation_gan(data, target):
 
 
 def setup_training_gan(prepared_data, batch_size=128, learning_rate=0.00016,
-                       betas_G=(0, 0.9), betas_D=(0, 0.9), tmax_G=165, tmax_D=165):
+                       betas_G=(0.0, 0.9), betas_D=(0.0, 0.9), tmax_G=165, tmax_D=165):
     """
     Setup models, optimizers and schedulers for training of GAN based on set parameters.
 
@@ -160,12 +166,14 @@ def setup_training_gan(prepared_data, batch_size=128, learning_rate=0.00016,
         and there is model, optimizer and scheduler for generator and discriminator (respectively).
     """
     use_cuda = 1
-    device = torch.device("cuda" if (torch.cuda.is_available() & use_cuda) else "cpu")
+    device = torch.device("cuda" if (torch.cuda.is_available() and use_cuda)  else "cpu")
     trainDataloader = DataLoader(TensorDataset(prepared_data['train_x_slide'],
                                                prepared_data['train_y_gan']), batch_size=batch_size, shuffle=False)
 
-    model_G = Generator(prepared_data['train_x'].shape[1]).to(device)
-    model_D = Discriminator().to(device)
+    model_G = Generator(prepared_data['train_x'].shape[1])
+    model_G = model_G.to(device)
+    model_D = Discriminator()
+    model_D = model_D.to(device)
 
     criterion = nn.BCELoss()
     optimizer_G = torch.optim.Adam(model_G.parameters(), lr=learning_rate, betas=betas_G)
@@ -181,7 +189,7 @@ def setup_training_gan(prepared_data, batch_size=128, learning_rate=0.00016,
     }
 
 
-def run_model_gan(prepared_models, num_epochs=165):
+def train_gan(prepared_models, num_epochs=165):
     """
     Training cycle for GAN model with set number of epochs.
 
@@ -210,12 +218,23 @@ def run_model_gan(prepared_models, num_epochs=165):
             x, y = x.to(device), y.to(device)
 
             # Generator forward pass
-            generated_data = model_G(x, device)
+            generated_data = model_G(x)
             generated_data = torch.cat([y[:, :4, :], generated_data.reshape(-1, 1, 1)], axis=1)
 
             # Discriminator training
+            '''
+            with torch.no_grad():
+            label_shape = model_D(y).shape
+        
+            real_labels = torch.ones(label_shape, device=device)
+            gen_labels = torch.zeros(label_shape, device=device)
+            '''
+
+            # Labels
             real_labels = torch.ones_like(model_D(y)).to(device)
             gen_labels = torch.zeros_like(real_labels).to(device)
+
+            test = model_D(y)
 
             loss_D_real = criterion(model_D(y), real_labels)
             lossD_gen = criterion(model_D(generated_data), gen_labels)
@@ -239,7 +258,11 @@ def run_model_gan(prepared_models, num_epochs=165):
     return model_G
 
 
-def evaluate_model_gan(model_G, prepared_data, device):
+def sample_noise_from_residuals(residuals, size=1):
+    return np.random.choice(residuals, size=size, replace=True)
+
+
+def evaluate_gan(model_G, prepared_data, device, noise=0):
     """
     Evaluation of model from GAN training phase.
 
@@ -247,23 +270,32 @@ def evaluate_model_gan(model_G, prepared_data, device):
         model_G(Generator): Model of generator from GAN training process.
         prepared_data (dictionary): Dictionary containing prepared data. It is an output of models_preparation_gan.
         device (torch.device): Device used for whole process of training.
+        noise (bool): Add noise for robust testing.
+            Defaults to 0.
 
     Returns:
         A dictionary containing MSE of generator, RMSE of generator, generator shape,
         training and testing values with predictions based on model.
     """
-    #device = prepared_data['device']
     y_scaler = prepared_data['y_scaler']
 
+
     model_G.eval()
-    pred_y_train = model_G(prepared_data['train_x_slide'].to(device), device)
-    pred_y_test = model_G(prepared_data['test_x_slide'].to(device), device)
+    with torch.no_grad():
+        pred_y_train = model_G(prepared_data['train_x_slide'].to(device))
+        pred_y_test = model_G(prepared_data['test_x_slide'].to(device))
 
     y_train_true = y_scaler.inverse_transform(prepared_data['train_y_slide'])
     y_train_pred = y_scaler.inverse_transform(pred_y_train.cpu().detach().numpy())
 
     y_test_true = y_scaler.inverse_transform(prepared_data['test_y_slide'])
     y_test_pred = y_scaler.inverse_transform(pred_y_test.cpu().detach().numpy())
+
+    if noise:
+        residues = y_train_true - y_train_pred
+        residues = residues.flatten()
+        noise_values = sample_noise_from_residuals(residues, len(y_test_true))
+        y_test_true = y_test_true.flatten() + noise_values
 
     MSE = mean_squared_error(y_test_true, y_test_pred)
     RMSE = math.sqrt(MSE)
@@ -276,8 +308,8 @@ def evaluate_model_gan(model_G, prepared_data, device):
     }
 
 
-def train_cycle_gan(data, target, num_epochs=165, batch_size=128, learning_rate=0.00016, betas_G=(0, 0.9),
-                    betas_D=(0, 0.9), tmax_G=165, tmax_D=165):
+def train_process_gan(data, target, num_epochs=165, batch_size=128, learning_rate=0.00016, betas_G=(0.0, 0.9),
+                      betas_D=(0.0, 0.9), tmax_G=165, tmax_D=165):
     """
     Whole process of training cycle for GAN model with set parameters.
 
@@ -303,14 +335,17 @@ def train_cycle_gan(data, target, num_epochs=165, batch_size=128, learning_rate=
         Same return as function evaluate_model_gan. A dictionary containing MSE of generator, RMSE of generator,
         generator shape, training and testing values with predictions based on model.
     """
-    prepared_data = models_preparation_gan(data, target)
+    prepared_data = data_preparation_gan(data, target)
     prepared_models = setup_training_gan(prepared_data, batch_size, learning_rate, betas_G, betas_D, tmax_G, tmax_D)
-    model_G = run_model_gan(prepared_models, num_epochs)
-    results = evaluate_model_gan(model_G, prepared_data, prepared_models["device"])
-    return results
+    model_G = train_gan(prepared_models, num_epochs)
+    results = evaluate_gan(model_G, prepared_data, prepared_models["device"])
+    return {
+        "results": results,
+        "model": model_G
+    }
 
 
-def use_model(model_file, model_shape, use_cuda=1):
+def load_gan(model_file, model_shape, use_cuda=1):
     """
     Loading of Torch model from state dict file.
 
@@ -328,3 +363,10 @@ def use_model(model_file, model_shape, use_cuda=1):
     state = torch.load(model_file, map_location=torch.device('cpu'))
     model_load.load_state_dict(state)
     return {'model': model_load, 'device': device}
+
+def output_from_model(model_path, data, target, noise=False):
+    data_result = data_preparation_gan(data, target)
+    model_path = model_path
+    model = load_gan(model_path, data_result["test_x_slide"].size(dim=2))
+    results = evaluate_gan(model["model"], data_result, model["device"],noise)
+    return results
