@@ -42,4 +42,3 @@ Podrobný rozbor metodologie, architektury modelu a vyhodnocení výsledků nale
 
 👉 [**Text práce (PDF)**](./graphs_text/apple.png/Jezek_Pavel_vyzkumny_ukol.pdf)
 
----
