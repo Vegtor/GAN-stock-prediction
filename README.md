@@ -18,7 +18,7 @@ Projekt zahrnuje:
 
 ## Použité technologie
 
-- Python (NumPy, Pandas, Matplotlib, TensorFlow / PyTorch)
+- Python (NumPy, Pandas, Matplotlib, PyTorch)
 - Jupyter Notebook
 - Scikit-learn
 - Matplotlib / Plotly pro vizualizace
