@@ -40,5 +40,5 @@ Níže je ukázka jednoho z výstupů modelu. Přesněji se jedná o akcie Apple
 
 Podrobný rozbor metodologie, architektury modelu a vyhodnocení výsledků naleznete v přiložené textové práci:
 
-👉 [**Text práce (PDF)**](./graphs_text/apple.png/Jezek_Pavel_vyzkumny_ukol.pdf)
+👉 [**Text práce (PDF)**](./graphs_text/Jezek_Pavel_vyzkumny_ukol.pdf)
 
