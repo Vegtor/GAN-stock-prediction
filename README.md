@@ -25,6 +25,16 @@ Projekt zahrnuje:
 
 ---
 
+## 📊 Výsledky a grafy
+
+Níže je ukázka jednoho z výstupů modelu. Přesněji se jedná o akcie Apple.
+
+| Graf | Popis |
+|------|--------|
+| ![Výsledek 1](./graphs_text/apple.png) | Porovnání generovaných dat akcie Apple s reálnými hodnotami. |
+
+
+---
 
 ## 📄 Podrobný text práce
 
