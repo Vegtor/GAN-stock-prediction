@@ -127,9 +127,6 @@ def data_preparation_gan(data, target):
     train_y = y_scaler.fit_transform(train_y.reshape(-1, 1))
     test_y = y_scaler.transform(test_y.reshape(-1, 1))
 
-    if test_x.shape[0] != test_y.shape[0]:
-        test = 0;
-
     train_x_slide, train_y_slide, train_y_gan = sliding_window(train_x, train_y, 4)
 
     test_x_slide, test_y_slide, test_y_gan = sliding_window(test_x, test_y, 4)

@@ -40,7 +40,7 @@ def trading_points(data, coef=0.05):
 
     return down_points, up_points
 
-def create_graph(data_list, names, axis, colours, widths, title, font_size, dates=None, plot_w = 500, plot_h = 500, legend_x = "left", legend_y = "top", pos_x = 1, pos_y = 1):
+def setup_figure(data_list, names, axis, colours, widths, title, font_size, dates=None, plot_w = 500, plot_h = 500, legend_x = "left", legend_y = "top", pos_x = 1, pos_y = 1):
     n = len(data_list[0])
     fig1 = go.Figure()
     if dates is None:
@@ -81,7 +81,30 @@ def create_graph(data_list, names, axis, colours, widths, title, font_size, date
             x=pos_x,
             y=pos_y
         ),
-        plot_bgcolor = 'white',
+        plot_bgcolor='white',
     )
+    return fig1
 
+def create_graph(data_list, names, axis, colours, widths, title, font_size, dates=None, plot_w = 500, plot_h = 500, legend_x = "left", legend_y = "top", pos_x = 1, pos_y = 1):
+    fig1 = setup_figure(data_list, names, axis, colours, widths, title, font_size, dates, plot_w, plot_h, legend_x, legend_y, pos_x, pos_y)
+    fig1.show()
+
+def graph_with_points(figure, points_list, y_data, dates, names, colours):
+    fig1 = figure
+    for i in range(len(points_list)):
+        fig1.add_trace(go.Scatter(x=[dates[j] for j in points_list[i]],
+                                  y=[y_data[j] for j in points_list[i]],
+                                  name=names[i],
+                                  mode='markers',
+                                  marker=dict(
+                                      symbol='square',
+                                      size=10,
+                                      color='rgba(0,0,0,0)',
+                                      line=dict(
+                                          color=colours[i],
+                                          width=2
+                                                )
+                                            ),
+                                  )
+                       )
     fig1.show()
