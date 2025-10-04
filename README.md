@@ -25,7 +25,7 @@ Projekt zahrnuje:
 
 ---
 
-## Výsledky a grafy
+## Ukázka výsledku
 
 Níže je ukázka jednoho z výstupů modelu. Přesněji se jedná o akcie Apple.
 
